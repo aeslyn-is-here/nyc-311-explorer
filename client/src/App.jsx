@@ -6,6 +6,7 @@ import SearchForm from "./Components/SearchForm";
 import StatsCard from "./Components/StatsCard";
 import TrendChart from "./Components/TrendChart";
 import ComplaintList from "./Components/ComplaintList";
+import SavedAlerts from "./Components/SavedAlerts";
 
 function App() {
   const [complaintTypes, setComplaintTypes] = useState([]);
@@ -17,18 +18,20 @@ function App() {
   const [stats, setStats] = useState(null);
   const [threshold, setThreshold] = useState(50);
   const [trendData, setTrendData] = useState([]);
+  const [savedAlerts, setSavedAlerts] = useState([]);
 
   useEffect(() => {
-    const fetchComplaintTypes = async () => {
-      const response = await axios.get(
-        "http://localhost:5001/api/complaint-types"
-      );
+  const fetchComplaintTypes = async () => {
+    const response = await axios.get(
+      "http://localhost:5001/api/complaint-types"
+    );
 
-      setComplaintTypes(response.data);
-    };
+    setComplaintTypes(response.data);
+  };
 
-    fetchComplaintTypes();
-  }, []);
+  fetchComplaintTypes();
+  fetchSavedAlerts();
+}, []);
 
   const searchComplaints = async () => {
     if (!zip) {
@@ -116,6 +119,75 @@ function App() {
     }
   };
 
+  const fetchSavedAlerts = async () => {
+  try {
+    const response = await axios.get("http://localhost:5001/api/alerts");
+    setSavedAlerts(response.data);
+  } catch (err) {
+    console.error(err);
+    setError("Could not load saved alerts.");
+  }
+};
+
+const saveAlert = async () => {
+  if (!zip || !complaintType) {
+    setError("Please enter a ZIP code and select a complaint type before saving an alert.");
+    return;
+  }
+
+  try {
+    setLoading(true);
+    setError("");
+
+    await axios.post("http://localhost:5001/api/alerts", {
+      zip,
+      complaintType,
+      threshold,
+    });
+
+    await fetchSavedAlerts();
+  } catch (err) {
+    console.error(err);
+    setError("Could not save alert.");
+  } finally {
+    setLoading(false);
+  }
+};
+
+const deleteAlert = async (id) => {
+  try {
+    setLoading(true);
+    setError("");
+
+    await axios.delete(`http://localhost:5001/api/alerts/${id}`);
+
+    await fetchSavedAlerts();
+  } catch (err) {
+    console.error(err);
+    setError("Could not delete alert.");
+  } finally {
+    setLoading(false);
+  }
+};
+
+const toggleAlertStatus = async (id, currentStatus) => {
+  try {
+    setLoading(true);
+    setError("");
+
+    await axios.patch(`http://localhost:5001/api/alerts/${id}`, {
+      isActive: !currentStatus,
+    });
+
+    await fetchSavedAlerts();
+  } catch (err) {
+    console.error(err);
+    setError("Could not update alert.");
+  } finally {
+    setLoading(false);
+  }
+};
+
   return (
     <main className="app">
       <h1>NYC 311 Complaint Explorer</h1>
@@ -142,12 +214,19 @@ function App() {
         <StatsCard
           stats={stats}
           threshold={threshold}
+          saveAlert={saveAlert}
         />
       )}
 
       {trendData.length > 0 && (
         <TrendChart trendData={trendData} />
       )}
+
+      <SavedAlerts
+        savedAlerts={savedAlerts}
+        deleteAlert={deleteAlert}
+        toggleAlertStatus={toggleAlertStatus}
+      />
 
       <ComplaintList complaints={complaints} />
     </main>

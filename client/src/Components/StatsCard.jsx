@@ -1,4 +1,4 @@
-function StatsCard({ stats, threshold }) {
+function StatsCard({ stats, threshold, saveAlert }) {
   return (
     <section className="stats-card">
     <h2>Trend Analysis</h2>
@@ -24,6 +24,12 @@ function StatsCard({ stats, threshold }) {
       )}  
 
       <p><strong>Spike Threshold:</strong> {threshold}%</p>
+
+      <button onClick={saveAlert}>
+        Save Alert
+      </button>
+
+      
     </section>
   );
 }

@@ -1,6 +1,8 @@
 const express = require("express");
 const cors = require("cors");
 const axios = require("axios");
+const mongoose = require("mongoose");
+const AlertRule = require("./models/AlertRule");
 
 require("dotenv").config();
 
@@ -10,6 +12,15 @@ app.use(cors());
 app.use(express.json());
 
 const PORT = process.env.PORT || 5001;
+
+mongoose
+  .connect(process.env.MONGODB_URI)
+  .then(() => {
+    console.log("Connected to MongoDB");
+  })
+  .catch((error) => {
+    console.error("MongoDB connection error:", error.message);
+  });
 
 // Health check route
 app.get("/", (req, res) => {
@@ -188,6 +199,99 @@ app.get("/api/trend", async (req, res) => {
 
     res.status(500).json({
       error: "Failed to fetch trend data",
+    });
+  }
+});
+
+app.get("/api/alerts", async (req, res) => {
+  try {
+    const alertRules = await AlertRule.find();
+
+    res.json(alertRules);
+  } catch (error) {
+    console.error("Error fetching alert rules:", error.message);
+
+    res.status(500).json({
+      error: "Failed to fetch alert rules",
+    });
+  }
+});
+
+app.post("/api/alerts", async (req, res) => {
+  try {
+    const { zip, complaintType, threshold } = req.body;
+
+    if (!zip || !complaintType) {
+      return res.status(400).json({
+        error: "ZIP code and complaint type are required",
+      });
+    }
+
+    const alertRule = await AlertRule.create({
+      zip,
+      complaintType,
+      threshold,
+      isActive: true,
+    });
+
+    res.status(201).json(alertRule);
+  } catch (error) {
+    console.error("Error creating alert rule:", error.message);
+
+    res.status(500).json({
+      error: "Failed to create alert rule",
+    });
+  }
+});
+
+app.delete("/api/alerts/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const deletedAlert = await AlertRule.findByIdAndDelete(id);
+
+    if (!deletedAlert) {
+      return res.status(404).json({
+        error: "Alert rule not found",
+      });
+    }
+
+    res.json({
+      message: "Alert rule deleted",
+      deletedAlert,
+    });
+  } catch (error) {
+    console.error("Error deleting alert rule:", error.message);
+
+    res.status(500).json({
+      error: "Failed to delete alert rule",
+    });
+  }
+});
+
+app.patch("/api/alerts/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { isActive } = req.body;
+
+    const updatedAlert = await AlertRule.findByIdAndUpdate(
+      id,
+      { isActive },
+      { new: true }
+    );
+
+    if (!updatedAlert) {
+      return res.status(404).json({
+        error: "Alert rule not found",
+      });
+    }
+
+    res.json(updatedAlert);
+  } catch (error) {
+    console.error("Error updating alert rule:", error.message);
+
+    res.status(500).json({
+      error: "Failed to update alert rule",
     });
   }
 });
