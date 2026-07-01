@@ -30,12 +30,16 @@ function SearchForm({
         ))}
       </select>
 
-      <input
+    <input
         type="number"
-        placeholder="Spike threshold %"
+        placeholder="Spike Threshold (%)"
         value={threshold}
-        onChange={(event) => setThreshold(Number(event.target.value))}
-      />
+        onChange={(e) =>
+            setThreshold(
+                e.target.value === "" ? "" : Number(e.target.value)
+            )
+        }
+    />
 
       <button onClick={searchComplaints}>Search</button>
       <button onClick={analyzeTrend}>Analyze Trend</button>

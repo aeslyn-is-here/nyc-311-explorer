@@ -16,7 +16,7 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [stats, setStats] = useState(null);
-  const [threshold, setThreshold] = useState(50);
+  const [threshold, setThreshold] = useState("");
   const [trendData, setTrendData] = useState([]);
   const [savedAlerts, setSavedAlerts] = useState([]);
 
@@ -130,8 +130,8 @@ function App() {
 };
 
 const saveAlert = async () => {
-  if (!zip || !complaintType) {
-    setError("Please enter a ZIP code and select a complaint type before saving an alert.");
+  if (!zip || !complaintType || threshold === "") {
+    setError("Please enter a ZIP code and select a complaint type and threshold before saving an alert.");
     return;
   }
 
@@ -188,10 +188,21 @@ const toggleAlertStatus = async (id, currentStatus) => {
   }
 };
 
+  const goHome = () => {
+    setZip("");
+    setComplaintType("");
+    setThreshold(50);
+    setComplaints([]);
+    setStats(null);
+    setTrendData([]);
+    setError("");
+  };
+
   return (
     <main className="app">
-      <h1>NYC 311 Complaint Explorer</h1>
-
+      <h1 onClick={goHome} className="site-title">
+        NYC 311 Complaint Explorer
+      </h1>
       <p>Search recent 311 complaints by ZIP code and complaint type.</p>
 
       <SearchForm

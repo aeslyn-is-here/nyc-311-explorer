@@ -20,6 +20,11 @@ const alertRuleSchema = new mongoose.Schema(
       required: true,
       default: true,
     },
+    currentlyTriggered: {
+        type: Boolean,
+        required: true,
+        default: false,
+    },
   },
   {
     timestamps: true,
