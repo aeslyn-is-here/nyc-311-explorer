@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
 import "./App.css";
-
 import SearchForm from "./Components/SearchForm";
 import StatsCard from "./Components/StatsCard";
 import TrendChart from "./Components/TrendChart";
 import ComplaintList from "./Components/ComplaintList";
 import SavedAlerts from "./Components/SavedAlerts";
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 function App() {
   const [complaintTypes, setComplaintTypes] = useState([]);
@@ -23,7 +24,7 @@ function App() {
   useEffect(() => {
   const fetchComplaintTypes = async () => {
     const response = await axios.get(
-      "http://localhost:5001/api/complaint-types"
+      `${API_BASE_URL}/api/complaint-types`
     );
 
     setComplaintTypes(response.data);
@@ -46,7 +47,7 @@ function App() {
       setTrendData([]);
 
       const response = await axios.get(
-        "http://localhost:5001/api/complaints",
+        `${API_BASE_URL}/api/complaints`,
         {
           params: {
             zip,
@@ -75,7 +76,7 @@ function App() {
       setError("");
 
       const response = await axios.get(
-        "http://localhost:5001/api/stats",
+        `${API_BASE_URL}/api/stats`,
         {
           params: {
             zip,
@@ -103,7 +104,7 @@ function App() {
 
     try {
       const response = await axios.get(
-        "http://localhost:5001/api/trend",
+        `${API_BASE_URL}/api/trend`,
         {
           params: {
             zip,
@@ -121,7 +122,7 @@ function App() {
 
   const fetchSavedAlerts = async () => {
   try {
-    const response = await axios.get("http://localhost:5001/api/alerts");
+    const response = await axios.get(`${API_BASE_URL}/api/alerts`);
     setSavedAlerts(response.data);
   } catch (err) {
     console.error(err);
@@ -139,7 +140,7 @@ const saveAlert = async () => {
     setLoading(true);
     setError("");
 
-    await axios.post("http://localhost:5001/api/alerts", {
+    await axios.post(`${API_BASE_URL}/api/alerts`, {
       zip,
       complaintType,
       threshold,
@@ -159,7 +160,7 @@ const deleteAlert = async (id) => {
     setLoading(true);
     setError("");
 
-    await axios.delete(`http://localhost:5001/api/alerts/${id}`);
+    await axios.delete(`${API_BASE_URL}/api/alerts/${id}`);
 
     await fetchSavedAlerts();
   } catch (err) {
@@ -175,7 +176,7 @@ const toggleAlertStatus = async (id, currentStatus) => {
     setLoading(true);
     setError("");
 
-    await axios.patch(`http://localhost:5001/api/alerts/${id}`, {
+    await axios.patch(`${API_BASE_URL}/api/alerts/${id}`, {
       isActive: !currentStatus,
     });
 
