@@ -228,3 +228,94 @@ button:hover {
 .user-controls button {
   margin: 0;
 }
+
+.notification-settings {
+  max-width: 760px;
+  margin: 28px auto;
+  padding: 24px;
+  background: #ffffff;
+  border: 3px solid #111111;
+  border-radius: 4px;
+  box-shadow: 6px 6px 0 #facc15;
+}
+
+.notification-settings h2 {
+  margin-top: 0;
+  margin-bottom: 18px;
+  padding-bottom: 10px;
+  border-bottom: 3px solid #111111;
+  text-align: center;
+}
+
+.notification-form {
+  display: grid;
+  gap: 16px;
+}
+
+.notification-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-weight: 700;
+}
+
+.notification-form input,
+.notification-form select {
+  width: 100%;
+  padding: 12px 14px;
+  border: 2px solid #111111;
+  border-radius: 2px;
+  background: #ffffff;
+  color: #111111;
+  font-size: 1rem;
+}
+
+.notification-form button {
+  margin-top: 4px;
+  width: 100%;
+}
+
+.app-nav button {
+  width: auto;
+}
+
+.app-nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin: 20px 0 32px;
+  padding: 14px;
+  background: #ffffff;
+  border: 3px solid #111111;
+  box-shadow: 6px 6px 0 #facc15;
+}
+
+.nav-left,
+.nav-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.nav-right span {
+  font-weight: 700;
+}
+
+.active-nav {
+  background: #111111;
+  color: #facc15;
+}
+
+@media (max-width: 700px) {
+  .app-nav {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .nav-left,
+  .nav-right {
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+}

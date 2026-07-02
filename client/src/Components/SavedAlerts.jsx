@@ -1,6 +1,4 @@
 function SavedAlerts({
-  user,
-  logoutUser,
   savedAlerts,
   deleteAlert,
   toggleAlertStatus,
@@ -9,17 +7,7 @@ function SavedAlerts({
     <section className="saved-alerts">
       <div className="saved-alerts-header">
         <h2>Saved Alerts</h2>
-        
-            {user && (
-                <div className="user-controls">
-                <span>Logged in as <strong>{user.name}</strong></span>
-
-                <button onClick={logoutUser}>
-                    Log Out
-                </button>
-                </div>
-            )}
-        </div>
+      </div>
 
       {savedAlerts.length === 0 ? (
         <p>No saved alerts yet.</p>

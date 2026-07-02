@@ -1,3 +1,5 @@
+require("dotenv").config();
+
 const express = require("express");
 const cors = require("cors");
 const axios = require("axios");
@@ -7,8 +9,9 @@ const cron = require("node-cron");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const User = require("./models/User");
+const sendEmailNotification = require("./services/notifications/email");
 
-require("dotenv").config();
+
 
 const app = express();
 
@@ -92,35 +95,51 @@ const calculateStats = async (zip, complaintType) => {
 };
 
 const checkAlerts = async () => {
-  const activeAlerts = await AlertRule.find({ isActive: true });
+  const activeAlerts = await AlertRule.find({ isActive: true }).populate("userId");
 
   for (const alert of activeAlerts) {
-    const stats = await calculateStats(
-      alert.zip,
-      alert.complaintType
-    );
+    const stats = await calculateStats(alert.zip, alert.complaintType);
+    const user = alert.userId;
 
     const triggered =
       stats.percentChange !== null &&
       stats.percentChange >= alert.threshold;
 
-    // Alert has just become triggered
     if (triggered && !alert.currentlyTriggered) {
-      await axios.post(process.env.SLACK_WEBHOOK_URL, {
-        text: `🚨 311 Alert Triggered: ${alert.complaintType} complaints in ZIP ${
-          alert.zip
-        } increased by ${stats.percentChange.toFixed(
-          1
-        )}% compared to the previous 7 days. Threshold: ${
-          alert.threshold
-        }%.`,
-      });
+      if (
+        (user.notificationMethod === "slack" ||
+          user.notificationMethod === "both") &&
+        user.slackWebhookUrl
+      ) {
+        await axios.post(user.slackWebhookUrl, {
+          text: `🚨 311 Alert Triggered: ${alert.complaintType} complaints in ZIP ${
+            alert.zip
+          } increased by ${stats.percentChange.toFixed(
+            1
+          )}% compared to the previous 7 days. Threshold: ${
+            alert.threshold
+          }%.`,
+        });
+      }
+
+      if (
+        (user.notificationMethod === "email" ||
+          user.notificationMethod === "both") &&
+        user.emailNotificationAddress
+      ) {
+        await sendEmailNotification({
+          to: user.emailNotificationAddress,
+          complaintType: alert.complaintType,
+          zip: alert.zip,
+          percentChange: stats.percentChange,
+          threshold: alert.threshold,
+        });
+      }
 
       alert.currentlyTriggered = true;
       await alert.save();
     }
 
-    // Alert has returned to normal
     if (!triggered && alert.currentlyTriggered) {
       alert.currentlyTriggered = false;
       await alert.save();
@@ -483,7 +502,7 @@ app.patch("/api/alerts/:id", authenticateUser, async (req, res) => {
     const { id } = req.params;
     const { isActive } = req.body;
 
-    const updatedAlert = await AlertRule.findByIdAndUpdate(
+    const updatedAlert = await AlertRule.findOneAndUpdate(
       {
         _id: id,
         userId: req.user.userId,
@@ -504,6 +523,48 @@ app.patch("/api/alerts/:id", authenticateUser, async (req, res) => {
 
     res.status(500).json({
       error: "Failed to update alert rule",
+    });
+  }
+});
+
+app.patch("/api/users/notification-settings", authenticateUser, async (req, res) => {
+  try {
+    const {
+      notificationMethod,
+      slackWebhookUrl,
+      emailNotificationAddress,
+    } = req.body;
+
+    const updatedUser = await User.findByIdAndUpdate(
+      req.user.userId,
+      {
+        notificationMethod,
+        slackWebhookUrl,
+        emailNotificationAddress,
+      },
+      { new: true }
+    ).select("-passwordHash");
+
+    res.json(updatedUser);
+  } catch (error) {
+    console.error("Error updating notification settings:", error.message);
+
+    res.status(500).json({
+      error: "Failed to update notification settings",
+    });
+  }
+});
+
+app.get("/api/users/me", authenticateUser, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.userId).select("-passwordHash");
+
+    res.json(user);
+  } catch (error) {
+    console.error("Error fetching user profile:", error.message);
+
+    res.status(500).json({
+      error: "Failed to fetch user profile",
     });
   }
 });

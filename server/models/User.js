@@ -18,6 +18,19 @@ const userSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    notificationMethod: {
+        type: String,
+        enum: ["none", "slack", "email", "both"],
+        default: "none",
+    },
+    slackWebhookUrl: {
+       type: String,
+       default: "",
+    },
+    emailNotificationAddress: {
+        type: String,
+        default: "",
+    },
   },
   {
     timestamps: true,

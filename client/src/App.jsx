@@ -8,6 +8,7 @@ import TrendChart from "./Components/TrendChart";
 import ComplaintList from "./Components/ComplaintList";
 import SavedAlerts from "./Components/SavedAlerts";
 import AuthForm from "./Components/AuthForm";
+import NotificationSettings from "./Components/NotificationSettings";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
@@ -24,6 +25,7 @@ function App() {
   const [savedAlerts, setSavedAlerts] = useState([]);
   const [user, setUser] = useState(null);
   const [token, setToken] = useState("");
+  const [view, setView] = useState("explore");
 
   useEffect(() => {
     const fetchComplaintTypes = async () => {
@@ -104,6 +106,7 @@ function App() {
 
       setToken(response.data.token);
       setUser(response.data.user);
+      setView("explore");
 
       localStorage.setItem("token", response.data.token);
       localStorage.setItem(
@@ -118,14 +121,16 @@ function App() {
   };
 
   const logoutUser = () => {
-    setUser(null);
+  setUser(null);
     setToken("");
     setSavedAlerts([]);
     setError("");
 
     localStorage.removeItem("token");
     localStorage.removeItem("user");
-};
+
+    setView("login");
+  };
 
   const searchComplaints = async () => {
     if (!zip) {
@@ -278,61 +283,145 @@ function App() {
   };
 
   const goHome = () => {
-    setZip("");
-    setComplaintType("");
-    setThreshold("");
-    setComplaints([]);
-    setStats(null);
-    setTrendData([]);
-    setError("");
+  setView("explore");
+  setZip("");
+  setComplaintType("");
+  setThreshold("");
+  setComplaints([]);
+  setStats(null);
+  setTrendData([]);
+  setError("");
+};
+  const updateNotificationSettings = async ({
+    notificationMethod,
+    slackWebhookUrl,
+    emailNotificationAddress,
+  }) => {
+      try {
+        setError("");
+
+        const response = await axios.patch(
+          `${API_BASE_URL}/api/users/notification-settings`,
+          {
+            notificationMethod,
+            slackWebhookUrl,
+            emailNotificationAddress,
+          },
+          {
+            headers: {
+              Authorization: `Bearer ${token || localStorage.getItem("token")}`,
+            },
+          }
+        );
+
+        setUser(response.data);
+        localStorage.setItem("user", JSON.stringify(response.data));
+      } catch (err) {
+        console.error(err);
+        setError("Could not update notification settings.");
+      }
   };
 
   return (
-    <main className="app">
-      <h1 onClick={goHome} className="site-title">
-        NYC 311 Complaint Explorer
-      </h1>
+  <main className="app">
+    <h1 onClick={goHome} className="site-title">
+      NYC 311 Complaint Explorer
+    </h1>
 
-      <p>Search recent 311 complaints by ZIP code and complaint type.</p>
+      <nav className="app-nav">
+        <div className="nav-left">
+          {view !== "explore" && (
+            <button onClick={() => setView("explore")}>
+              Explore
+            </button>
+          )}
 
-      <SearchForm
-        zip={zip}
-        setZip={setZip}
-        complaintType={complaintType}
-        setComplaintType={setComplaintType}
-        complaintTypes={complaintTypes}
-        threshold={threshold}
-        setThreshold={setThreshold}
-        searchComplaints={searchComplaints}
-        analyzeTrend={analyzeTrend}
-      />
+          {user && view !== "alerts" && (
+            <button onClick={() => setView("alerts")}>
+              My Alerts
+            </button>
+          )}
+        </div>
 
-      {loading && <p>Loading complaints...</p>}
-      {error && <p className="error">{error}</p>}
+        <div className="nav-right">
+          {user ? (
+            <>
+              <span>
+                Logged in as <strong>{user.name}</strong>
+              </span>
 
-      {stats && (
-        <StatsCard stats={stats} threshold={threshold} saveAlert={saveAlert} />
-      )}
+              <button onClick={logoutUser}>
+                Log Out
+              </button>
+            </>
+          ) : (
+            <button onClick={() => setView("login")}>
+              Log In
+            </button>
+          )}
+        </div>
+      </nav>
 
-      {trendData.length > 0 && <TrendChart trendData={trendData} />}
+    {view === "explore" && (
+      <>
+        <p>Search recent 311 complaints by ZIP code and complaint type.</p>
 
-      {user ? (
-        <>
+        <SearchForm
+          zip={zip}
+          setZip={setZip}
+          complaintType={complaintType}
+          setComplaintType={setComplaintType}
+          complaintTypes={complaintTypes}
+          threshold={threshold}
+          setThreshold={setThreshold}
+          searchComplaints={searchComplaints}
+          analyzeTrend={analyzeTrend}
+        />
 
-          <SavedAlerts
-            user={user}
-            logoutUser={logoutUser}
-            savedAlerts={savedAlerts}
-            deleteAlert={deleteAlert}
-            toggleAlertStatus={toggleAlertStatus}
+        {loading && <p>Loading complaints...</p>}
+
+        {error && <p className="error">{error}</p>}
+
+        {stats && (
+          <StatsCard
+            stats={stats}
+            threshold={threshold}
+            saveAlert={saveAlert}
           />
-        </>
-      ) : (
-        <AuthForm registerUser={registerUser} loginUser={loginUser} />
-      )}
+        )}
 
-      <ComplaintList complaints={complaints} />
-    </main>
+        {trendData.length > 0 && (
+          <TrendChart trendData={trendData} />
+        )}
+
+        <ComplaintList complaints={complaints} />
+      </>
+    )}
+
+    {view === "alerts" && user && (
+      <>
+        <NotificationSettings
+          user={user}
+          updateNotificationSettings={updateNotificationSettings}
+        />
+
+        <SavedAlerts
+          savedAlerts={savedAlerts}
+          deleteAlert={deleteAlert}
+          toggleAlertStatus={toggleAlertStatus}
+        />
+      </>
+    )}
+
+    {view === "login" && !user && (
+      <section className="login-page">
+        <AuthForm
+          registerUser={registerUser}
+          loginUser={loginUser}
+        />
+      </section>
+    )}
+  </main>
   );
 }
 
