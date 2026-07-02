@@ -1,16 +1,8 @@
 # NYC 311 Complaint Explorer
 
-A full-stack web application that helps New York City residents monitor 311 complaints, analyze trends, and receive automated notifications when complaint activity spikes.
+A full-stack web application that allows users to explore NYC 311 complaint data, analyze neighborhood trends, and receive automated notifications when complaint activity spikes.
 
-Users can search recent NYC 311 complaints by ZIP code and complaint type, visualize complaint trends, create personalized alerts, and receive Slack notifications when complaint volumes exceed user-defined thresholds.
-
----
-
-## Live Demo
-
-**Frontend:** https://nyc-311-explorer.vercel.app
-
-**Backend API:** https://nyc-311-explorer.onrender.com
+Built with React, Node.js, Express, MongoDB, and the NYC Open Data API.
 
 ---
 
@@ -18,36 +10,42 @@ Users can search recent NYC 311 complaints by ZIP code and complaint type, visua
 
 ### Public Features
 
-- Search NYC 311 complaints by ZIP code
+- Search recent NYC 311 complaints by ZIP code
 - Filter complaints by complaint type
-- View recent complaint details
-- Analyze complaint trends over time
-- Interactive trend visualization
-- NYC-inspired responsive user interface
+- View detailed complaint records
+- Analyze week-over-week complaint trends
+- Interactive 14-day trend chart
+- Responsive React interface
 
-### User Accounts
+### User Features
 
 - User registration
-- Secure login
+- Secure login using JWT authentication
 - Persistent login sessions
-- Password hashing with bcrypt
-- JWT authentication
-- Protected API routes
+- Save custom complaint alerts
+- Activate or deactivate alerts
+- Delete alerts
+- Personal notification preferences
 
-### Personalized Alerts
+### Notifications
 
-- Save custom alert rules
-- User-specific saved alerts
-- Enable or disable alerts
-- Delete saved alerts
-- Each user can only access their own alerts
+- Slack notifications using Incoming Webhooks
+- Email notifications using Resend
+- Choose between:
+  - Slack
+  - Email
+  - Slack + Email
+- Automatic background monitoring using scheduled jobs
 
-### Automated Notifications
+---
 
-- Hourly background scheduler
-- Detects complaint spikes automatically
-- Slack notifications when thresholds are exceeded
-- Duplicate notification prevention while an alert remains active
+## How It Works
+
+1. Search NYC 311 complaints by ZIP code and complaint type.
+2. Analyze complaint trends over the previous two weeks.
+3. Save an alert with a custom percentage threshold.
+4. A scheduled background process checks all active alerts.
+5. When a threshold is exceeded, the application automatically sends a Slack message and/or email to the user.
 
 ---
 
@@ -56,78 +54,97 @@ Users can search recent NYC 311 complaints by ZIP code and complaint type, visua
 ### Frontend
 
 - React
+- Vite
 - Axios
 - Chart.js
-- CSS
 
 ### Backend
 
 - Node.js
 - Express
+- MongoDB Atlas
 - Mongoose
-- JSON Web Tokens (JWT)
+- JWT Authentication
 - bcrypt
 - node-cron
 
-### Database
-
-- MongoDB Atlas
-
-### Cloud Deployment
-
-- Vercel
-- Render
-
-### External APIs
+### APIs
 
 - NYC Open Data API
 - Slack Incoming Webhooks
+- Resend Email API
+
+### Deployment
+
+- Vercel (Frontend)
+- Render (Backend)
 
 ---
 
-## Architecture
+## Project Structure
 
 ```
-                     React Frontend
-                          (Vercel)
-                              │
-                    Axios HTTP Requests
-                              │
-                              ▼
-                     Express REST API
-                          (Render)
-               ┌──────────────┴──────────────┐
-               │                             │
-               ▼                             ▼
-        MongoDB Atlas                NYC Open Data API
-               │
-        Users & Alert Rules
-               │
-               ▼
-      Hourly Background Scheduler
-               │
-               ▼
-        Slack Notifications
+client/
+    React frontend
+
+server/
+    Express API
+    MongoDB models
+    Authentication
+    Scheduled alert checker
+    Notification services
 ```
 
 ---
 
 ## Authentication
 
-The application uses JSON Web Tokens (JWT) for authentication.
+Users can:
 
-Authenticated users can:
-
+- Register an account
+- Log in securely
+- Persist their session
 - Save personalized alerts
-- View only their own alerts
-- Toggle alerts on or off
-- Delete their own alerts
+- Configure notification preferences
 
-Public users can still:
+Authentication is handled using JSON Web Tokens (JWT).
 
-- Search complaints
-- Analyze complaint trends
-- View charts
+---
+
+## Notification System
+
+Each user can configure their preferred notification method.
+
+Supported methods:
+
+- None
+- Slack
+- Email
+- Slack + Email
+
+The alert scheduler checks active alerts on a schedule and automatically sends notifications when thresholds are exceeded.
+
+---
+
+## Future Improvements
+
+- Dedicated dashboard navigation
+- Separate login page
+- Date range filtering
+- Historical complaint analysis
+- Compare two custom time periods
+- Alert editing
+- Alert history
+- User profile page
+- Map visualization
+- Mobile UI improvements
+- React Router navigation
+
+---
+
+## Screenshots
+
+*(Coming soon)*
 
 ---
 
@@ -137,116 +154,58 @@ Public users can still:
 
 ```bash
 git clone https://github.com/aeslyn-is-here/nyc-311-explorer.git
+cd nyc-311-explorer
 ```
 
-### Install dependencies
-
-Backend
+### Backend
 
 ```bash
 cd server
 npm install
+npm run dev
 ```
 
-Frontend
+### Frontend
 
 ```bash
 cd client
 npm install
-```
-
-### Environment Variables
-
-#### Backend (`server/.env`)
-
-```env
-MONGODB_URI=your_mongodb_connection_string
-JWT_SECRET=your_secret_key
-SLACK_WEBHOOK_URL=your_slack_webhook
-NYC_311_API_URL=https://data.cityofnewyork.us/resource/erm2-nwe9.json
-```
-
-#### Frontend (`client/.env.local`)
-
-```env
-VITE_API_BASE_URL=http://localhost:5001
-```
-
-### Start the backend
-
-```bash
-cd server
 npm run dev
 ```
 
-### Start the frontend
+---
 
-```bash
-cd client
-npm run dev
+## Environment Variables
+
+Backend (`server/.env`)
+
+```env
+MONGODB_URI=
+JWT_SECRET=
+NYC_OPEN_DATA_API=
+RESEND_API_KEY=
 ```
 
-Open:
+Frontend (`client/.env`)
 
-```
-http://localhost:5173
+```env
+VITE_API_BASE_URL=
 ```
 
 ---
 
-## Project Structure
+## Author
 
-```
-client/
-    Components/
-    App.jsx
-    App.css
+**Aeslyn Vlahos**
 
-server/
-    models/
-    routes/
-    middleware/
-    server.js
-```
+MS Computer Science
 
----
+Built as a portfolio project demonstrating:
 
-## What I Learned
-
-Building this project gave me hands-on experience with:
-
-- Designing REST APIs
-- React component architecture
-- State management
-- MongoDB and Mongoose
-- User authentication with JWT
-- Password hashing with bcrypt
-- Express middleware
-- Background schedulers using node-cron
-- Slack API integrations
-- Cloud deployment with Render and Vercel
-- Environment variable management
-- Building a complete full-stack application from design through deployment
-
----
-
-## Future Enhancements
-
-- User-configurable Slack webhooks
-- Email notifications
-- Interactive map visualization
-- User notification preferences
-- Account settings page
-- Dark mode
-- Mobile-first responsive redesign
-- Admin dashboard
-- Analytics dashboard
-- Docker deployment
-
----
-
-## Why I Built This
-
-I built NYC 311 Complaint Explorer to gain experience designing, building, and deploying a modern full-stack web application.
-
-The project demonstrates user authentication, cloud deployment, scheduled background jobs, REST APIs, MongoDB, React, Express, and third-party integrations while solving a practical problem using New York City's Open Data platform.
+- Full-stack web development
+- REST API design
+- Authentication
+- MongoDB data modeling
+- Background job scheduling
+- Third-party API integrations
+- Deployment using Vercel and Render
