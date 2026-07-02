@@ -4,6 +4,9 @@ const axios = require("axios");
 const mongoose = require("mongoose");
 const AlertRule = require("./models/AlertRule");
 const cron = require("node-cron");
+const bcrypt = require("bcrypt");
+const jwt = require("jsonwebtoken");
+const User = require("./models/User");
 
 require("dotenv").config();
 
@@ -124,6 +127,117 @@ const checkAlerts = async () => {
     }
   }
 };
+
+app.post("/api/auth/register", async (req, res) => {
+  try {
+    const { name, email, password } = req.body;
+
+    if (!name || !email || !password) {
+      return res.status(400).json({
+        error: "Name, email, and password are required",
+      });
+    }
+
+    const existingUser = await User.findOne({ email });
+
+    if (existingUser) {
+      return res.status(400).json({
+        error: "An account with this email already exists",
+      });
+    }
+
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    const user = await User.create({
+      name,
+      email,
+      passwordHash,
+    });
+
+    const token = jwt.sign(
+      {
+        userId: user._id,
+        email: user.email,
+      },
+      process.env.JWT_SECRET,
+      {
+        expiresIn: "7d",
+      }
+    );
+
+    res.status(201).json({
+      token,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+      },
+    });
+  } catch (error) {
+    console.error("Error registering user:", error.message);
+
+    res.status(500).json({
+      error: "Failed to register user",
+    });
+  }
+});
+
+app.post("/api/auth/login", async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({
+        error: "Email and password are required",
+      });
+    }
+
+    const user = await User.findOne({ email });
+
+    if (!user) {
+      return res.status(401).json({
+        error: "Invalid email or password",
+      });
+    }
+
+    const passwordMatches = await bcrypt.compare(
+      password,
+      user.passwordHash
+    );
+
+    if (!passwordMatches) {
+      return res.status(401).json({
+        error: "Invalid email or password",
+      });
+    }
+
+    const token = jwt.sign(
+      {
+        userId: user._id,
+        email: user.email,
+      },
+      process.env.JWT_SECRET,
+      {
+        expiresIn: "7d",
+      }
+    );
+
+    res.json({
+      token,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+      },
+    });
+  } catch (error) {
+    console.error("Error logging in:", error.message);
+
+    res.status(500).json({
+      error: "Failed to log in",
+    });
+  }
+});
 
 // Health check route
 app.get("/", (req, res) => {
@@ -265,9 +379,38 @@ app.get("/api/trend", async (req, res) => {
   }
 });
 
-app.get("/api/alerts", async (req, res) => {
+const authenticateUser = (req, res, next) => {
+  const authHeader = req.headers.authorization;
+
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return res.status(401).json({
+      error: "Authentication token required",
+    });
+  }
+
+  const token = authHeader.split(" ")[1];
+
   try {
-    const alertRules = await AlertRule.find();
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+    req.user = {
+      userId: decoded.userId,
+      email: decoded.email,
+    };
+
+    next();
+  } catch (error) {
+    return res.status(401).json({
+      error: "Invalid or expired token",
+    });
+  }
+};
+
+app.get("/api/alerts", authenticateUser, async (req, res) => {
+  try {
+    const alertRules = await AlertRule.find({
+      userId: req.user.userId,
+    });
 
     res.json(alertRules);
   } catch (error) {
@@ -279,7 +422,7 @@ app.get("/api/alerts", async (req, res) => {
   }
 });
 
-app.post("/api/alerts", async (req, res) => {
+app.post("/api/alerts", authenticateUser, async (req, res) => {
   try {
     const { zip, complaintType, threshold } = req.body;
 
@@ -290,6 +433,7 @@ app.post("/api/alerts", async (req, res) => {
     }
 
     const alertRule = await AlertRule.create({
+      userId: req.user.userId,
       zip,
       complaintType,
       threshold,
@@ -306,11 +450,14 @@ app.post("/api/alerts", async (req, res) => {
   }
 });
 
-app.delete("/api/alerts/:id", async (req, res) => {
+app.delete("/api/alerts/:id", authenticateUser, async (req, res) => {
   try {
     const { id } = req.params;
 
-    const deletedAlert = await AlertRule.findByIdAndDelete(id);
+    const deletedAlert = await AlertRule.findOneAndDelete({
+      _id: id,
+      userId: req.user.userId,
+    });
 
     if (!deletedAlert) {
       return res.status(404).json({
@@ -331,13 +478,16 @@ app.delete("/api/alerts/:id", async (req, res) => {
   }
 });
 
-app.patch("/api/alerts/:id", async (req, res) => {
+app.patch("/api/alerts/:id", authenticateUser, async (req, res) => {
   try {
     const { id } = req.params;
     const { isActive } = req.body;
 
     const updatedAlert = await AlertRule.findByIdAndUpdate(
-      id,
+      {
+        _id: id,
+        userId: req.user.userId,
+      },
       { isActive },
       { new: true }
     );

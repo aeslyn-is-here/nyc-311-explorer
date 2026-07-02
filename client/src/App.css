@@ -156,3 +156,75 @@ button:hover {
   background: #000000;
   color: #ffffff;
 }
+
+.auth-card {
+  max-width: 520px;
+  margin: 28px auto;
+  padding: 28px;
+  background: #ffffff;
+  border: 3px solid #111111;
+  border-radius: 4px;
+  box-shadow: 6px 6px 0 #facc15;
+  text-align: center;
+}
+
+.auth-card h2 {
+  margin-top: 0;
+  margin-bottom: 20px;
+  border-bottom: 3px solid #111111;
+  padding-bottom: 10px;
+}
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.auth-form input {
+  width: 100%;
+  padding: 12px 14px;
+  border: 2px solid #111111;
+  border-radius: 2px;
+  font-size: 1rem;
+  background: #ffffff;
+  color: #111111;
+}
+
+.auth-form input::placeholder {
+  color: #6b7280;
+}
+
+.auth-card button {
+  width: 100%;
+  margin-top: 8px;
+}
+
+.welcome-message {
+  text-align: center;
+  font-weight: 700;
+  margin: 24px 0 12px;
+}
+.saved-alerts-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 3px solid #111;
+}
+
+.user-controls {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.user-controls span {
+  font-weight: 600;
+}
+
+.user-controls button {
+  margin: 0;
+}
