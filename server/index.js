@@ -20,6 +20,12 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 5001;
 
+// NYC Open Data (Socrata) app token raises the API rate limit.
+// Sent as an X-App-Token header on every request to the 311 dataset.
+const nycApiHeaders = process.env.NYC_APP_TOKEN
+  ? { "X-App-Token": process.env.NYC_APP_TOKEN }
+  : {};
+
 mongoose
   .connect(process.env.MONGODB_URI)
   .then(() => {
@@ -47,6 +53,7 @@ const calculateStats = async (zip, complaintType) => {
   `;
 
   const response = await axios.get(process.env.NYC_311_API_URL, {
+    headers: nycApiHeaders,
     params: {
       $query: query,
     },
@@ -284,6 +291,7 @@ app.post("/api/test-slack", async (req, res) => {
 app.get("/api/complaint-types", async (req, res) => {
   try {
     const response = await axios.get(process.env.NYC_311_API_URL, {
+      headers: nycApiHeaders,
       params: {
         $select: "complaint_type",
         $group: "complaint_type",
@@ -349,6 +357,7 @@ app.get("/api/trend", async (req, res) => {
     `;
 
     const response = await axios.get(process.env.NYC_311_API_URL, {
+      headers: nycApiHeaders,
       params: {
         $query: query,
       },
@@ -611,6 +620,7 @@ app.get("/api/complaints", async (req, res) => {
     `;
 
     const response = await axios.get(process.env.NYC_311_API_URL, {
+      headers: nycApiHeaders,
       params: {
         $query: query,
       },
