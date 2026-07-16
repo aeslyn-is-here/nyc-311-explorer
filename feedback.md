@@ -21,6 +21,7 @@ Detailed, tracked items live in [roadmap.md](roadmap.md). This is the short vers
 - Failures show a single generic "Could not…" message. Give more specific feedback and a way to retry.
 - Add a note on where the data comes from and how fresh it is.
 - Verify the search form and chart work well on mobile.
+- Simplify the search form — it currently mixes unrelated inputs. The "Spike Threshold (%)" field only matters when saving an alert, yet it sits next to Search and Analyze Trend, where it does nothing. Only show it in the save-an-alert flow (e.g. reveal it on "Save Alert" or move it into the alerts view) so the main search stays to ZIP + complaint type.
 
 ## Feature ideas
 
