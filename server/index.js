@@ -2,6 +2,7 @@ require("dotenv").config();
 
 const express = require("express");
 const cors = require("cors");
+const rateLimit = require("express-rate-limit");
 const axios = require("axios");
 const mongoose = require("mongoose");
 const AlertRule = require("./models/AlertRule");
@@ -11,12 +12,90 @@ const jwt = require("jsonwebtoken");
 const User = require("./models/User");
 const sendEmailNotification = require("./services/notifications/email");
 
+const REQUIRED_ENV_VARS = [
+  "JWT_SECRET",
+  "MONGODB_URI",
+  "NYC_311_API_URL",
+  "CRON_SECRET",
+];
+const missingEnvVars = REQUIRED_ENV_VARS.filter((name) => !process.env[name]);
 
+if (missingEnvVars.length > 0) {
+  console.error(
+    `Missing required environment variable(s): ${missingEnvVars.join(", ")}`
+  );
+  process.exit(1);
+}
 
 const app = express();
 
-app.use(cors());
+// Comma-separated list of allowed frontend origins, e.g.
+// FRONTEND_URL=http://localhost:5173,https://your-app.vercel.app
+const allowedOrigins = (process.env.FRONTEND_URL || "http://localhost:5173")
+  .split(",")
+  .map((origin) => origin.trim());
+
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      // Allow non-browser requests (no Origin header, e.g. curl/Postman).
+      // Passing `false` (not an Error) tells cors to just omit the
+      // Access-Control-Allow-Origin header rather than raising a 500
+      // that would leak a stack trace to the client.
+      callback(null, !origin || allowedOrigins.includes(origin));
+    },
+  })
+);
 app.use(express.json());
+
+// Strict limiter for login/register: legitimate users rarely fail more
+// than a few times in 15 minutes, so this makes password-guessing
+// scripts impractically slow without bothering real users.
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many attempts. Please try again later." },
+});
+
+// Looser limiter for the routes that proxy the NYC Open Data API,
+// so one visitor can't hammer our server (and the external API) with
+// rapid-fire requests, while normal browsing is unaffected.
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many requests. Please try again later." },
+});
+
+const authenticateUser = (req, res, next) => {
+  const authHeader = req.headers.authorization;
+
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return res.status(401).json({
+      error: "Authentication token required",
+    });
+  }
+
+  const token = authHeader.split(" ")[1];
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+    req.user = {
+      userId: decoded.userId,
+      email: decoded.email,
+    };
+
+    next();
+  } catch (error) {
+    return res.status(401).json({
+      error: "Invalid or expired token",
+    });
+  }
+};
 
 const PORT = process.env.PORT || 5001;
 
@@ -25,6 +104,42 @@ const PORT = process.env.PORT || 5001;
 const nycApiHeaders = process.env.NYC_APP_TOKEN
   ? { "X-App-Token": process.env.NYC_APP_TOKEN }
   : {};
+
+// Guards against SoQL injection: zip must look like a real 5-digit ZIP,
+// and any text dropped into a SoQL string literal must have its
+// single quotes escaped so it can't break out of the query.
+const ZIP_REGEX = /^\d{5}$/;
+const isValidZip = (zip) => typeof zip === "string" && ZIP_REGEX.test(zip);
+const escapeSoqlString = (value) => String(value).replace(/'/g, "''");
+
+// Basic email shape check (not fully RFC-compliant, but catches the
+// obvious "not an email" cases without needing an extra library).
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const isValidEmail = (email) =>
+  typeof email === "string" && EMAIL_REGEX.test(email);
+
+// Password must be at least 8 characters and contain both a letter
+// and a number, to rule out trivially guessable passwords.
+const isStrongPassword = (password) =>
+  typeof password === "string" &&
+  password.length >= 8 &&
+  /[a-zA-Z]/.test(password) &&
+  /[0-9]/.test(password);
+
+// Prevents SSRF: the server later POSTs to this URL unattended, so it
+// must genuinely be a Slack webhook, not an arbitrary attacker-chosen
+// address. Parsing with `URL` and checking the exact hostname (rather
+// than a string prefix like startsWith("https://hooks.slack.com/"))
+// avoids being fooled by lookalikes such as
+// "https://hooks.slack.com.evil.com/".
+const isValidSlackWebhookUrl = (url) => {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "https:" && parsed.hostname === "hooks.slack.com";
+  } catch {
+    return false;
+  }
+};
 
 mongoose
   .connect(process.env.MONGODB_URI)
@@ -36,6 +151,10 @@ mongoose
   });
 
 const calculateStats = async (zip, complaintType) => {
+  if (!isValidZip(zip)) {
+    throw new Error("Invalid ZIP code");
+  }
+
   const today = new Date();
 
   const sevenDaysAgo = new Date();
@@ -47,7 +166,7 @@ const calculateStats = async (zip, complaintType) => {
   const query = `
     SELECT *
     WHERE incident_zip='${zip}'
-    AND complaint_type='${complaintType}'
+    AND complaint_type='${escapeSoqlString(complaintType)}'
     ORDER BY created_date DESC
     LIMIT 5000
   `;
@@ -105,7 +224,14 @@ const checkAlerts = async () => {
   const activeAlerts = await AlertRule.find({ isActive: true }).populate("userId");
 
   for (const alert of activeAlerts) {
-    const stats = await calculateStats(alert.zip, alert.complaintType);
+    let stats;
+    try {
+      stats = await calculateStats(alert.zip, alert.complaintType);
+    } catch (error) {
+      console.error(`Skipping alert ${alert._id}:`, error.message);
+      continue;
+    }
+
     const user = alert.userId;
 
     const triggered =
@@ -154,13 +280,24 @@ const checkAlerts = async () => {
   }
 };
 
-app.post("/api/auth/register", async (req, res) => {
+app.post("/api/auth/register", authLimiter, async (req, res) => {
   try {
     const { name, email, password } = req.body;
 
     if (!name || !email || !password) {
       return res.status(400).json({
         error: "Name, email, and password are required",
+      });
+    }
+
+    if (!isValidEmail(email)) {
+      return res.status(400).json({ error: "Enter a valid email address" });
+    }
+
+    if (!isStrongPassword(password)) {
+      return res.status(400).json({
+        error:
+          "Password must be at least 8 characters and include a letter and a number",
       });
     }
 
@@ -208,7 +345,7 @@ app.post("/api/auth/register", async (req, res) => {
   }
 });
 
-app.post("/api/auth/login", async (req, res) => {
+app.post("/api/auth/login", authLimiter, async (req, res) => {
   try {
     const { email, password } = req.body;
 
@@ -270,7 +407,7 @@ app.get("/", (req, res) => {
   res.send("Local 311 Alerts API is running");
 });
 
-app.post("/api/test-slack", async (req, res) => {
+app.post("/api/test-slack", authenticateUser, async (req, res) => {
   try {
     await axios.post(process.env.SLACK_WEBHOOK_URL, {
       text: "Hello from NYC 311 Alerts 👋",
@@ -288,7 +425,7 @@ app.post("/api/test-slack", async (req, res) => {
   }
 });
 
-app.get("/api/complaint-types", async (req, res) => {
+app.get("/api/complaint-types", apiLimiter, async (req, res) => {
   try {
     const response = await axios.get(process.env.NYC_311_API_URL, {
       headers: nycApiHeaders,
@@ -311,7 +448,7 @@ app.get("/api/complaint-types", async (req, res) => {
   }
 });
 
-app.get("/api/stats", async (req, res) => {
+app.get("/api/stats", apiLimiter, async (req, res) => {
   try {
     const { zip, complaintType } = req.query;
 
@@ -319,6 +456,10 @@ app.get("/api/stats", async (req, res) => {
       return res.status(400).json({
         error: "ZIP code and complaint type are required",
       });
+    }
+
+    if (!isValidZip(zip)) {
+      return res.status(400).json({ error: "ZIP code must be 5 digits" });
     }
 
     const stats = await calculateStats(zip, complaintType);
@@ -333,7 +474,7 @@ app.get("/api/stats", async (req, res) => {
   }
 });
 
-app.get("/api/trend", async (req, res) => {
+app.get("/api/trend", apiLimiter, async (req, res) => {
   try {
     const { zip, complaintType } = req.query;
 
@@ -341,6 +482,10 @@ app.get("/api/trend", async (req, res) => {
       return res.status(400).json({
         error: "ZIP code and complaint type are required",
       });
+    }
+
+    if (!isValidZip(zip)) {
+      return res.status(400).json({ error: "ZIP code must be 5 digits" });
     }
 
     const today = new Date();
@@ -351,7 +496,7 @@ app.get("/api/trend", async (req, res) => {
     const query = `
       SELECT *
       WHERE incident_zip='${zip}'
-      AND complaint_type='${complaintType}'
+      AND complaint_type='${escapeSoqlString(complaintType)}'
       ORDER BY created_date DESC
       LIMIT 5000
     `;
@@ -406,33 +551,6 @@ app.get("/api/trend", async (req, res) => {
     });
   }
 });
-
-const authenticateUser = (req, res, next) => {
-  const authHeader = req.headers.authorization;
-
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return res.status(401).json({
-      error: "Authentication token required",
-    });
-  }
-
-  const token = authHeader.split(" ")[1];
-
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-
-    req.user = {
-      userId: decoded.userId,
-      email: decoded.email,
-    };
-
-    next();
-  } catch (error) {
-    return res.status(401).json({
-      error: "Invalid or expired token",
-    });
-  }
-};
 
 app.get("/api/alerts", authenticateUser, async (req, res) => {
   try {
@@ -544,6 +662,12 @@ app.patch("/api/users/notification-settings", authenticateUser, async (req, res)
       emailNotificationAddress,
     } = req.body;
 
+    if (slackWebhookUrl && !isValidSlackWebhookUrl(slackWebhookUrl)) {
+      return res.status(400).json({
+        error: "Slack webhook URL must be a valid https://hooks.slack.com/... URL",
+      });
+    }
+
     const updatedUser = await User.findByIdAndUpdate(
       req.user.userId,
       {
@@ -579,6 +703,10 @@ app.get("/api/users/me", authenticateUser, async (req, res) => {
 });
 
 app.get("/api/check-alerts", async (req, res) => {
+  if (req.get("X-Cron-Secret") !== process.env.CRON_SECRET) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
   try {
     await checkAlerts();
 
@@ -595,7 +723,7 @@ app.get("/api/check-alerts", async (req, res) => {
 });
 
 // Complaints route
-app.get("/api/complaints", async (req, res) => {
+app.get("/api/complaints", apiLimiter, async (req, res) => {
   try {
     const { zip, complaintType } = req.query;
 
@@ -605,13 +733,17 @@ app.get("/api/complaints", async (req, res) => {
       });
     }
 
+    if (!isValidZip(zip)) {
+      return res.status(400).json({ error: "ZIP code must be 5 digits" });
+    }
+
     let query = `
       SELECT *
       WHERE incident_zip='${zip}'
     `;
 
     if (complaintType) {
-      query += ` AND complaint_type='${complaintType}'`;
+      query += ` AND complaint_type='${escapeSoqlString(complaintType)}'`;
     }
 
     query += `
