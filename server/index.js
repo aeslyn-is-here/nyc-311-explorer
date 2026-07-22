@@ -1,6 +1,7 @@
 require("dotenv").config();
 
 const express = require("express");
+const helmet = require("helmet");
 const cors = require("cors");
 const rateLimit = require("express-rate-limit");
 const axios = require("axios");
@@ -12,6 +13,32 @@ const jwt = require("jsonwebtoken");
 const User = require("./models/User");
 const sendEmailNotification = require("./services/notifications/email");
 
+// Structured logging: every line is one JSON object with a consistent
+// shape (timestamp, level, message, optional context), instead of ad-hoc
+// strings. Makes logs searchable/filterable once deployed, rather than
+// relying on grep-ing free text.
+const log = {
+  info: (message, meta = {}) =>
+    console.log(
+      JSON.stringify({
+        level: "info",
+        message,
+        time: new Date().toISOString(),
+        ...meta,
+      })
+    ),
+  error: (message, error, meta = {}) =>
+    console.error(
+      JSON.stringify({
+        level: "error",
+        message,
+        error: error?.message,
+        time: new Date().toISOString(),
+        ...meta,
+      })
+    ),
+};
+
 const REQUIRED_ENV_VARS = [
   "JWT_SECRET",
   "MONGODB_URI",
@@ -21,13 +48,20 @@ const REQUIRED_ENV_VARS = [
 const missingEnvVars = REQUIRED_ENV_VARS.filter((name) => !process.env[name]);
 
 if (missingEnvVars.length > 0) {
-  console.error(
-    `Missing required environment variable(s): ${missingEnvVars.join(", ")}`
-  );
+  log.error("Missing required environment variable(s)", null, {
+    missing: missingEnvVars,
+  });
   process.exit(1);
 }
 
 const app = express();
+
+// crossOriginResourcePolicy defaults to "same-origin", which browsers
+// enforce independently of CORS and would block the deployed frontend
+// (a different origin, by design) from reading responses even though
+// our CORS allow-list above already permits it. "cross-origin" defers
+// access control to CORS, which is the check we actually want here.
+app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
 
 // Comma-separated list of allowed frontend origins, e.g.
 // FRONTEND_URL=http://localhost:5173,https://your-app.vercel.app
@@ -46,7 +80,10 @@ app.use(
     },
   })
 );
-app.use(express.json());
+// Caps the total request body size so a huge payload can't exhaust
+// server memory before any route code even runs. None of this app's
+// legitimate payloads (auth forms, alert rules) come close to 100kb.
+app.use(express.json({ limit: "100kb" }));
 
 // Strict limiter for login/register: legitimate users rarely fail more
 // than a few times in 15 minutes, so this makes password-guessing
@@ -144,10 +181,10 @@ const isValidSlackWebhookUrl = (url) => {
 mongoose
   .connect(process.env.MONGODB_URI)
   .then(() => {
-    console.log("Connected to MongoDB");
+    log.info("Connected to MongoDB");
   })
   .catch((error) => {
-    console.error("MongoDB connection error:", error.message);
+    log.error("MongoDB connection error", error);
   });
 
 const calculateStats = async (zip, complaintType) => {
@@ -228,7 +265,7 @@ const checkAlerts = async () => {
     try {
       stats = await calculateStats(alert.zip, alert.complaintType);
     } catch (error) {
-      console.error(`Skipping alert ${alert._id}:`, error.message);
+      log.error("Skipping alert", error, { alertId: alert._id });
       continue;
     }
 
@@ -337,7 +374,7 @@ app.post("/api/auth/register", authLimiter, async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Error registering user:", error.message);
+    log.error("Error registering user", error);
 
     res.status(500).json({
       error: "Failed to register user",
@@ -394,7 +431,7 @@ app.post("/api/auth/login", authLimiter, async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Error logging in:", error.message);
+    log.error("Error logging in", error);
 
     res.status(500).json({
       error: "Failed to log in",
@@ -417,7 +454,7 @@ app.post("/api/test-slack", authenticateUser, async (req, res) => {
       message: "Slack test message sent",
     });
   } catch (error) {
-    console.error("Error sending Slack message:", error.message);
+    log.error("Error sending Slack message", error);
 
     res.status(500).json({
       error: "Failed to send Slack message",
@@ -443,7 +480,7 @@ app.get("/api/complaint-types", apiLimiter, async (req, res) => {
 
     res.json(complaintTypes);
   } catch (error) {
-    console.error("Error fetching complaint types:", error.message);
+    log.error("Error fetching complaint types", error);
     res.status(500).json({ error: "Failed to fetch complaint types" });
   }
 });
@@ -466,7 +503,7 @@ app.get("/api/stats", apiLimiter, async (req, res) => {
 
     res.json(stats);
   } catch (error) {
-    console.error("Error calculating stats:", error.message);
+    log.error("Error calculating stats", error);
 
     res.status(500).json({
       error: "Failed to calculate stats",
@@ -544,7 +581,7 @@ app.get("/api/trend", apiLimiter, async (req, res) => {
       trendData,
     });
   } catch (error) {
-    console.error("Error fetching trend data:", error.message);
+    log.error("Error fetching trend data", error);
 
     res.status(500).json({
       error: "Failed to fetch trend data",
@@ -560,7 +597,7 @@ app.get("/api/alerts", authenticateUser, async (req, res) => {
 
     res.json(alertRules);
   } catch (error) {
-    console.error("Error fetching alert rules:", error.message);
+    log.error("Error fetching alert rules", error);
 
     res.status(500).json({
       error: "Failed to fetch alert rules",
@@ -588,7 +625,7 @@ app.post("/api/alerts", authenticateUser, async (req, res) => {
 
     res.status(201).json(alertRule);
   } catch (error) {
-    console.error("Error creating alert rule:", error.message);
+    log.error("Error creating alert rule", error);
 
     res.status(500).json({
       error: "Failed to create alert rule",
@@ -616,7 +653,7 @@ app.delete("/api/alerts/:id", authenticateUser, async (req, res) => {
       deletedAlert,
     });
   } catch (error) {
-    console.error("Error deleting alert rule:", error.message);
+    log.error("Error deleting alert rule", error);
 
     res.status(500).json({
       error: "Failed to delete alert rule",
@@ -646,7 +683,7 @@ app.patch("/api/alerts/:id", authenticateUser, async (req, res) => {
 
     res.json(updatedAlert);
   } catch (error) {
-    console.error("Error updating alert rule:", error.message);
+    log.error("Error updating alert rule", error);
 
     res.status(500).json({
       error: "Failed to update alert rule",
@@ -675,12 +712,12 @@ app.patch("/api/users/notification-settings", authenticateUser, async (req, res)
         slackWebhookUrl,
         emailNotificationAddress,
       },
-      { new: true }
+      { new: true, runValidators: true }
     ).select("-passwordHash");
 
     res.json(updatedUser);
   } catch (error) {
-    console.error("Error updating notification settings:", error.message);
+    log.error("Error updating notification settings", error);
 
     res.status(500).json({
       error: "Failed to update notification settings",
@@ -694,7 +731,7 @@ app.get("/api/users/me", authenticateUser, async (req, res) => {
 
     res.json(user);
   } catch (error) {
-    console.error("Error fetching user profile:", error.message);
+    log.error("Error fetching user profile", error);
 
     res.status(500).json({
       error: "Failed to fetch user profile",
@@ -714,7 +751,7 @@ app.get("/api/check-alerts", async (req, res) => {
       message: "Alerts checked successfully",
     });
   } catch (error) {
-    console.error("Error checking alerts:", error.message);
+    log.error("Error checking alerts", error);
 
     res.status(500).json({
       error: "Failed to check alerts",
@@ -760,7 +797,7 @@ app.get("/api/complaints", apiLimiter, async (req, res) => {
 
     res.json(response.data);
   } catch (error) {
-    console.error("Error fetching complaints:", error.message);
+    log.error("Error fetching complaints", error);
 
     res.status(500).json({
       error: "Failed to fetch complaints",
@@ -770,13 +807,13 @@ app.get("/api/complaints", apiLimiter, async (req, res) => {
 
 cron.schedule("0 * * * *", async () => {
   try {
-    console.log("Running scheduled alert check...");
+    log.info("Running scheduled alert check");
     await checkAlerts();
   } catch (error) {
-    console.error("Scheduled alert check failed:", error.message);
+    log.error("Scheduled alert check failed", error);
   }
 });
 
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  log.info(`Server running on port ${PORT}`);
 });

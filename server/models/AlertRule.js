@@ -10,10 +10,12 @@ const alertRuleSchema = new mongoose.Schema(
     zip: {
       type: String,
       required: true,
+      maxlength: 5,
     },
     complaintType: {
       type: String,
       required: true,
+      maxlength: 100,
     },
     threshold: {
       type: Number,

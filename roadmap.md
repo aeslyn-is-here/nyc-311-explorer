@@ -8,25 +8,25 @@ A living document capturing security hardening, architecture/refactoring work, a
 
 ### Critical
 
-- [ ] **SoQL injection in NYC API queries.** `zip` and `complaintType` are interpolated directly into the SoQL `$query` string in `calculateStats`, `/api/trend`, and `/api/complaints` (`server/index.js:41`, `:343`, `:599`). Validate/escape inputs — enforce a 5-digit ZIP regex, and pass `complaintType` via a parameterized `$where` with proper quoting/escaping (double single-quotes) or an allow-list drawn from `/api/complaint-types`.
-- [ ] **JWT secret not validated at boot.** If `JWT_SECRET` is unset, tokens are signed/verified with `undefined`, silently weakening auth. Fail fast on startup if any required env var is missing.
-- [ ] **Permissive CORS.** `app.use(cors())` allows every origin even though the API is authenticated. Restrict to the known frontend origin(s) via an env-configured allow-list.
+- [x] **SoQL injection in NYC API queries.** `zip` and `complaintType` are interpolated directly into the SoQL `$query` string in `calculateStats`, `/api/trend`, and `/api/complaints` (`server/index.js:41`, `:343`, `:599`). Validate/escape inputs — enforce a 5-digit ZIP regex, and pass `complaintType` via a parameterized `$where` with proper quoting/escaping (double single-quotes) or an allow-list drawn from `/api/complaint-types`.
+- [x] **JWT secret not validated at boot.** If `JWT_SECRET` is unset, tokens are signed/verified with `undefined`, silently weakening auth. Fail fast on startup if any required env var is missing.
+- [x] **Permissive CORS.** `app.use(cors())` allows every origin even though the API is authenticated. Restrict to the known frontend origin(s) via an env-configured allow-list.
 
 ### High
 
-- [ ] **No rate limiting.** Auth endpoints (`/api/auth/login`, `/register`) and the NYC-proxy endpoints are open to brute force and abuse. Add `express-rate-limit`, stricter on auth routes.
-- [ ] **Unauthenticated alert-check trigger.** `GET /api/check-alerts` (`server/index.js:572`) lets anyone force a full alert sweep (Slack/email fan-out, external API load). Protect it or restrict to an internal token / cron-only.
-- [ ] **`/api/test-slack` exposes/uses server webhook.** (`server/index.js:266`) Anyone can POST to it and spam the configured Slack channel. Remove from production or gate behind auth.
-- [ ] **No password strength or email format validation** on register (`server/index.js:150`). Enforce minimum length/complexity and validate email server-side.
-- [ ] **SSRF via user-supplied `slackWebhookUrl`.** Users store an arbitrary URL that the server later POSTs to (`server/index.js:114`). Validate it against the `hooks.slack.com` host to prevent using the server as an SSRF pivot.
+- [x] **No rate limiting.** Auth endpoints (`/api/auth/login`, `/register`) and the NYC-proxy endpoints are open to brute force and abuse. Add `express-rate-limit`, stricter on auth routes.
+- [x] **Unauthenticated alert-check trigger.** `GET /api/check-alerts` (`server/index.js:572`) lets anyone force a full alert sweep (Slack/email fan-out, external API load). Protect it or restrict to an internal token / cron-only.
+- [x] **`/api/test-slack` exposes/uses server webhook.** (`server/index.js:266`) Anyone can POST to it and spam the configured Slack channel. Remove from production or gate behind auth.
+- [x] **No password strength or email format validation** on register (`server/index.js:150`). Enforce minimum length/complexity and validate email server-side.
+- [x] **SSRF via user-supplied `slackWebhookUrl`.** Users store an arbitrary URL that the server later POSTs to (`server/index.js:114`). Validate it against the `hooks.slack.com` host to prevent using the server as an SSRF pivot.
 
 ### Medium
 
-- [ ] **No security headers.** Add `helmet` to the Express app.
-- [ ] **JWT stored in `localStorage`** (client) is XSS-exfiltratable. Consider httpOnly cookies with CSRF protection, or accept the tradeoff explicitly.
-- [ ] **No request body size limits / input length caps** — cap `express.json()` size and field lengths.
-- [ ] **Generic error handling leaks nothing but also logs `error.message` only** — ensure no stack traces or secrets reach clients; add structured logging server-side.
-- [ ] **Dependency & secret hygiene** — add `npm audit` to CI, confirm `.env` is git-ignored, rotate any keys that were ever committed.
+- [x] **No security headers.** Add `helmet` to the Express app. — Also overrode the default `crossOriginResourcePolicy` (`same-origin` → `cross-origin`), since the default would have silently blocked the deployed frontend's cross-origin requests despite CORS allowing them.
+- [x] **JWT stored in `localStorage`** (client) is XSS-exfiltratable. Consider httpOnly cookies with CSRF protection, or accept the tradeoff explicitly. — **Decision (2026-07-22): accepted for now.** Client code has no `dangerouslySetInnerHTML`/`innerHTML`/`eval`, so there's no known XSS vector today; the risk is theoretical until one is introduced (e.g. rendering unescaped user content, a vulnerable dependency). Revisit with an httpOnly-cookie + CSRF migration if that changes.
+- [x] **No request body size limits / input length caps** — cap `express.json()` size and field lengths. — `express.json({ limit: "100kb" })`, plus Mongoose `maxlength` on `User`/`AlertRule` string fields (with `runValidators: true` added to the `findByIdAndUpdate` call that was previously skipping them).
+- [x] **Generic error handling leaks nothing but also logs `error.message` only** — ensure no stack traces or secrets reach clients; add structured logging server-side. — Audited every catch block: `error.message` already never reached a client response. Added a small structured (JSON-line) logger used everywhere instead of ad-hoc `console.log`/`console.error` strings.
+- [x] **Dependency & secret hygiene** — add `npm audit` to CI, confirm `.env` is git-ignored, rotate any keys that were ever committed. — `npm audit fix` applied to both packages (0 vulnerabilities). `.env` confirmed git-ignored in both packages. **Found and fixed a real leak:** `server/.env` (with the live `MONGODB_URI` password) was committed in early history and reachable on the public GitHub remote; password rotated in Atlas and updated locally + on Render, confirmed working. `JWT_SECRET`/`SLACK_WEBHOOK_URL`/`RESEND_API_KEY` were never in that leaked history. Wiring `npm audit` into an actual CI pipeline is deferred to Section 2 (no CI exists yet).
 
 ---
 
@@ -99,4 +99,4 @@ A living document capturing security hardening, architecture/refactoring work, a
 
 ---
 
-_Last updated: 2026-07-15_
+_Last updated: 2026-07-22_
