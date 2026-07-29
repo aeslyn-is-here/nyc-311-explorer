@@ -34,12 +34,12 @@ A living document capturing security hardening, architecture/refactoring work, a
 
 ### Server
 
-- [ ] **Break up the 639-line `index.js`.** Split into layers: `routes/` (auth, alerts, complaints, users), `controllers/`, `services/` (nyc311, stats, alerts), and `middleware/` (auth, error handler, validation). Mount routers from a thin `app.js`; keep `index.js` as the bootstrap.
-- [ ] **Extract a NYC 311 client module** — one place that builds queries, sets timeouts/retries, and handles the SoQL escaping fix above. Both `stats` and `trend` duplicate the same fetch+query logic today.
-- [ ] **Deduplicate stats/trend fetching** — both pull the same 5000-record window; a shared fetch + in-memory aggregation would halve external calls.
+- [x] **Break up the 639-line `index.js`.** Split into layers: `routes/` (auth, alerts, complaints, users), `controllers/`, `services/` (nyc311, stats, alerts), and `middleware/` (auth, error handler, validation). Mount routers from a thin `app.js`; keep `index.js` as the bootstrap. — Done 2026-07-29: `index.js` is now 30 lines (bootstrap only); `app.js` builds/wires the Express app; routes/services/middleware/utils/config split out as planned. No `controllers/` layer added — routes call services directly, which felt like enough indirection for this app's size.
+- [x] **Extract a NYC 311 client module** — one place that builds queries, sets timeouts/retries, and handles the SoQL escaping fix above. Both `stats` and `trend` duplicate the same fetch+query logic today. — Done 2026-07-29: `services/nyc311.js` (`fetchNycComplaints`, `fetchComplaintTypes`), used by `stats`, `/api/trend`, and `/api/complaints`. Timeouts/retries not yet added.
+- [ ] **Deduplicate stats/trend fetching** — both pull the same 5000-record window; a shared fetch + in-memory aggregation would halve external calls. Deliberately deferred: this changes runtime behavior (actual caching), not just file organization, so kept separate from the structural refactor above.
 - [ ] **Centralized error-handling middleware** instead of repeated try/catch blocks that all log-and-500.
 - [ ] **Input validation layer** (e.g. `zod` or `express-validator`) applied at route boundaries.
-- [ ] **Config module** that reads + validates env once and exports typed config; no scattered `process.env` reads.
+- [x] **Config module** that reads + validates env once and exports typed config; no scattered `process.env` reads. — Done 2026-07-29: `config/index.js`. Confirmed via grep that every other file reads env vars through `config`, not `process.env` directly.
 - [ ] **Move cron to a separate worker/process** so alert checking doesn't compete with request handling and can scale independently.
 - [ ] **Add tests** — currently none. Unit tests for `calculateStats`/alert-trigger logic, integration tests for routes (supertest + mongodb-memory-server).
 
@@ -99,4 +99,4 @@ A living document capturing security hardening, architecture/refactoring work, a
 
 ---
 
-_Last updated: 2026-07-22_
+_Last updated: 2026-07-29_

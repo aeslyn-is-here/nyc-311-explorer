@@ -1,6 +1,7 @@
 const { Resend } = require("resend");
+const config = require("../../config");
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+const resend = new Resend(config.resendApiKey);
 
 const sendEmailNotification = async ({
   to,
