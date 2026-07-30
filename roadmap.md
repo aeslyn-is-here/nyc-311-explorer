@@ -41,14 +41,15 @@ A living document capturing security hardening, architecture/refactoring work, a
 - [ ] **Input validation layer** (e.g. `zod` or `express-validator`) applied at route boundaries.
 - [x] **Config module** that reads + validates env once and exports typed config; no scattered `process.env` reads. — Done 2026-07-29: `config/index.js`. Confirmed via grep that every other file reads env vars through `config`, not `process.env` directly.
 - [ ] **Move cron to a separate worker/process** so alert checking doesn't compete with request handling and can scale independently.
-- [ ] **Add tests** — currently none. Unit tests for `calculateStats`/alert-trigger logic, integration tests for routes (supertest + mongodb-memory-server).
+- [x] **Add tests** — currently none. Unit tests for `calculateStats`/alert-trigger logic, integration tests for routes (supertest + mongodb-memory-server). — Done 2026-07-29: 41 tests across 4 suites (`npm test` in `server/`). Unit: `utils/validation.js` (pure functions), `services/stats.js` (`calculateStats`, NYC API mocked), `services/alerts.js` (`checkAlerts`, covers trigger/re-trigger/reset/skip-on-error logic). Integration: register→login→create/list/delete alert via `supertest` against the real Express app + a real in-memory MongoDB. Still open: route coverage for `complaints`/`users` routes, and tests for the security-relevant edge cases (rate limiting, CORS, SoQL escaping at the route layer).
 
 ### Client
 
-- [ ] **Decompose `App.jsx` (427 lines).** It holds all state, data fetching, auth, and view routing. Extract:
+- [x] **Decompose `App.jsx` (427 lines).** It holds all state, data fetching, auth, and view routing. Extract:
   - An `AuthContext` / `useAuth` hook for token+user+localStorage.
   - A data layer (`api.js` axios instance with a baseURL + auth interceptor) so the `Bearer` header isn't rebuilt in every call.
   - Custom hooks: `useComplaints`, `useTrend`, `useAlerts`.
+  — Done 2026-07-30: `App.jsx` is 271 lines (down from 428) — data-fetching and auth fully extracted into `context/AuthContext.jsx`, `api/client.js`, and `hooks/` (`useComplaintTypes`, `useComplaints`, `useTrend`, `useAlerts`). Remaining lines are UI state (zip/complaintType/threshold/loading/error/view), validation, and rendering — view routing still uses the `view` state string (separate roadmap item below) rather than react-router. Verified with a real headless-browser run: register → logout → login → search → analyze trend → save alert → view in My Alerts → logout, zero console/page errors, screenshots confirmed correct rendering at each step.
 - [ ] **Introduce a real router** (`react-router`) instead of the `view` state string; enables deep links and cleaner nav.
 - [ ] **Add a data-fetching library** (TanStack Query) for caching, loading/error states, and request cancellation — removes most manual `loading`/`error` state.
 - [ ] **Error boundary** around the app.
@@ -99,4 +100,4 @@ A living document capturing security hardening, architecture/refactoring work, a
 
 ---
 
-_Last updated: 2026-07-29_
+_Last updated: 2026-07-30_
