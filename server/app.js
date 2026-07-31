@@ -6,6 +6,7 @@ const authRoutes = require("./routes/auth");
 const complaintsRoutes = require("./routes/complaints");
 const alertsRoutes = require("./routes/alerts");
 const usersRoutes = require("./routes/users");
+const errorHandler = require("./middleware/errorHandler");
 
 const app = express();
 
@@ -41,5 +42,9 @@ app.use("/api", authRoutes);
 app.use("/api", complaintsRoutes);
 app.use("/api", alertsRoutes);
 app.use("/api", usersRoutes);
+
+// Must be registered last — Express only routes errors to a 4-arg
+// middleware, and only from handlers mounted before it.
+app.use(errorHandler);
 
 module.exports = app;

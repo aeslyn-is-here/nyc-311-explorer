@@ -1,6 +1,5 @@
 const express = require("express");
 const AlertRule = require("../models/AlertRule");
-const log = require("../utils/logger");
 const config = require("../config");
 const authenticateUser = require("../middleware/auth");
 const checkAlerts = require("../services/alerts");
@@ -8,105 +7,73 @@ const checkAlerts = require("../services/alerts");
 const router = express.Router();
 
 router.get("/alerts", authenticateUser, async (req, res) => {
-  try {
-    const alertRules = await AlertRule.find({
-      userId: req.user.userId,
-    });
+  const alertRules = await AlertRule.find({
+    userId: req.user.userId,
+  });
 
-    res.json(alertRules);
-  } catch (error) {
-    log.error("Error fetching alert rules", error);
-
-    res.status(500).json({
-      error: "Failed to fetch alert rules",
-    });
-  }
+  res.json(alertRules);
 });
 
 router.post("/alerts", authenticateUser, async (req, res) => {
-  try {
-    const { zip, complaintType, threshold } = req.body;
+  const { zip, complaintType, threshold } = req.body;
 
-    if (!zip || !complaintType) {
-      return res.status(400).json({
-        error: "ZIP code and complaint type are required",
-      });
-    }
-
-    const alertRule = await AlertRule.create({
-      userId: req.user.userId,
-      zip,
-      complaintType,
-      threshold,
-      isActive: true,
-    });
-
-    res.status(201).json(alertRule);
-  } catch (error) {
-    log.error("Error creating alert rule", error);
-
-    res.status(500).json({
-      error: "Failed to create alert rule",
+  if (!zip || !complaintType) {
+    return res.status(400).json({
+      error: "ZIP code and complaint type are required",
     });
   }
+
+  const alertRule = await AlertRule.create({
+    userId: req.user.userId,
+    zip,
+    complaintType,
+    threshold,
+    isActive: true,
+  });
+
+  res.status(201).json(alertRule);
 });
 
 router.delete("/alerts/:id", authenticateUser, async (req, res) => {
-  try {
-    const { id } = req.params;
+  const { id } = req.params;
 
-    const deletedAlert = await AlertRule.findOneAndDelete({
-      _id: id,
-      userId: req.user.userId,
-    });
+  const deletedAlert = await AlertRule.findOneAndDelete({
+    _id: id,
+    userId: req.user.userId,
+  });
 
-    if (!deletedAlert) {
-      return res.status(404).json({
-        error: "Alert rule not found",
-      });
-    }
-
-    res.json({
-      message: "Alert rule deleted",
-      deletedAlert,
-    });
-  } catch (error) {
-    log.error("Error deleting alert rule", error);
-
-    res.status(500).json({
-      error: "Failed to delete alert rule",
+  if (!deletedAlert) {
+    return res.status(404).json({
+      error: "Alert rule not found",
     });
   }
+
+  res.json({
+    message: "Alert rule deleted",
+    deletedAlert,
+  });
 });
 
 router.patch("/alerts/:id", authenticateUser, async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { isActive } = req.body;
+  const { id } = req.params;
+  const { isActive } = req.body;
 
-    const updatedAlert = await AlertRule.findOneAndUpdate(
-      {
-        _id: id,
-        userId: req.user.userId,
-      },
-      { isActive },
-      { new: true }
-    );
+  const updatedAlert = await AlertRule.findOneAndUpdate(
+    {
+      _id: id,
+      userId: req.user.userId,
+    },
+    { isActive },
+    { new: true }
+  );
 
-    if (!updatedAlert) {
-      return res.status(404).json({
-        error: "Alert rule not found",
-      });
-    }
-
-    res.json(updatedAlert);
-  } catch (error) {
-    log.error("Error updating alert rule", error);
-
-    res.status(500).json({
-      error: "Failed to update alert rule",
+  if (!updatedAlert) {
+    return res.status(404).json({
+      error: "Alert rule not found",
     });
   }
+
+  res.json(updatedAlert);
 });
 
 router.get("/check-alerts", async (req, res) => {
@@ -114,19 +81,11 @@ router.get("/check-alerts", async (req, res) => {
     return res.status(401).json({ error: "Unauthorized" });
   }
 
-  try {
-    await checkAlerts();
+  await checkAlerts();
 
-    res.json({
-      message: "Alerts checked successfully",
-    });
-  } catch (error) {
-    log.error("Error checking alerts", error);
-
-    res.status(500).json({
-      error: "Failed to check alerts",
-    });
-  }
+  res.json({
+    message: "Alerts checked successfully",
+  });
 });
 
 module.exports = router;
