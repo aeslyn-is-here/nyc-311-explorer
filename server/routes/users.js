@@ -3,23 +3,18 @@ const axios = require("axios");
 const User = require("../models/User");
 const config = require("../config");
 const authenticateUser = require("../middleware/auth");
-const { isValidSlackWebhookUrl } = require("../utils/validation");
+const validate = require("../middleware/validate");
+const { notificationSettingsSchema } = require("../validation/users");
 
 const router = express.Router();
 
 router.patch(
   "/users/notification-settings",
   authenticateUser,
+  validate(notificationSettingsSchema),
   async (req, res) => {
     const { notificationMethod, slackWebhookUrl, emailNotificationAddress } =
       req.body;
-
-    if (slackWebhookUrl && !isValidSlackWebhookUrl(slackWebhookUrl)) {
-      return res.status(400).json({
-        error:
-          "Slack webhook URL must be a valid https://hooks.slack.com/... URL",
-      });
-    }
 
     const updatedUser = await User.findByIdAndUpdate(
       req.user.userId,

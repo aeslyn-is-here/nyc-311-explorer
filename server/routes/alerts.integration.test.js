@@ -66,6 +66,15 @@ describe("auth + alerts, end to end", () => {
     expect(res.status).toBe(401);
   });
 
+  test("rejects creating an alert with a malformed ZIP (validation layer)", async () => {
+    const res = await request(app)
+      .post("/api/alerts")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ zip: "not-a-zip", complaintType: "Noise", threshold: 50 });
+
+    expect(res.status).toBe(400);
+  });
+
   test("creates an alert rule for the logged-in user", async () => {
     const res = await request(app)
       .post("/api/alerts")
@@ -84,6 +93,14 @@ describe("auth + alerts, end to end", () => {
     expect(res.status).toBe(200);
     expect(res.body).toHaveLength(1);
     expect(res.body[0].zip).toBe("10001");
+  });
+
+  test("rejects a malformed alert id with 400, not a 500 crash (validation layer)", async () => {
+    const res = await request(app)
+      .delete("/api/alerts/this-is-not-a-mongo-id")
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(res.status).toBe(400);
   });
 
   test("deletes the alert", async () => {

@@ -28,7 +28,8 @@
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^9.7.2",
     "node-cron": "^4.5.0",
-    "resend": "^6.16.0"
+    "resend": "^6.16.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "jest": "^30.4.2",

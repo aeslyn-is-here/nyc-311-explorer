@@ -1,11 +1,17 @@
 const express = require("express");
 const { apiLimiter } = require("../middleware/rateLimiters");
-const { isValidZip, escapeSoqlString } = require("../utils/validation");
+const { escapeSoqlString } = require("../utils/validation");
 const {
   fetchNycComplaints,
   fetchComplaintTypes,
 } = require("../services/nyc311");
 const calculateStats = require("../services/stats");
+const validate = require("../middleware/validate");
+const {
+  statsQuerySchema,
+  trendQuerySchema,
+  complaintsQuerySchema,
+} = require("../validation/complaints");
 
 const router = express.Router();
 
@@ -15,117 +21,102 @@ router.get("/complaint-types", apiLimiter, async (req, res) => {
   res.json(complaintTypes);
 });
 
-router.get("/stats", apiLimiter, async (req, res) => {
-  const { zip, complaintType } = req.query;
+router.get(
+  "/stats",
+  apiLimiter,
+  validate(statsQuerySchema),
+  async (req, res) => {
+    const { zip, complaintType } = req.query;
 
-  if (!zip || !complaintType) {
-    return res.status(400).json({
-      error: "ZIP code and complaint type are required",
-    });
+    const stats = await calculateStats(zip, complaintType);
+
+    res.json(stats);
   }
+);
 
-  if (!isValidZip(zip)) {
-    return res.status(400).json({ error: "ZIP code must be 5 digits" });
-  }
+router.get(
+  "/trend",
+  apiLimiter,
+  validate(trendQuerySchema),
+  async (req, res) => {
+    const { zip, complaintType } = req.query;
 
-  const stats = await calculateStats(zip, complaintType);
+    const today = new Date();
 
-  res.json(stats);
-});
+    const fourteenDaysAgo = new Date();
+    fourteenDaysAgo.setDate(today.getDate() - 14);
 
-router.get("/trend", apiLimiter, async (req, res) => {
-  const { zip, complaintType } = req.query;
+    const query = `
+      SELECT *
+      WHERE incident_zip='${zip}'
+      AND complaint_type='${escapeSoqlString(complaintType)}'
+      ORDER BY created_date DESC
+      LIMIT 5000
+    `;
 
-  if (!zip || !complaintType) {
-    return res.status(400).json({
-      error: "ZIP code and complaint type are required",
-    });
-  }
+    const complaints = await fetchNycComplaints(query);
 
-  if (!isValidZip(zip)) {
-    return res.status(400).json({ error: "ZIP code must be 5 digits" });
-  }
+    const dailyCounts = {};
 
-  const today = new Date();
+    for (let i = 13; i >= 0; i--) {
+      const date = new Date();
+      date.setDate(today.getDate() - i);
 
-  const fourteenDaysAgo = new Date();
-  fourteenDaysAgo.setDate(today.getDate() - 14);
+      const dateKey = date.toISOString().split("T")[0];
 
-  const query = `
-    SELECT *
-    WHERE incident_zip='${zip}'
-    AND complaint_type='${escapeSoqlString(complaintType)}'
-    ORDER BY created_date DESC
-    LIMIT 5000
-  `;
-
-  const complaints = await fetchNycComplaints(query);
-
-  const dailyCounts = {};
-
-  for (let i = 13; i >= 0; i--) {
-    const date = new Date();
-    date.setDate(today.getDate() - i);
-
-    const dateKey = date.toISOString().split("T")[0];
-
-    dailyCounts[dateKey] = 0;
-  }
-
-  complaints.forEach((complaint) => {
-    const createdDate = new Date(complaint.created_date);
-
-    if (createdDate >= fourteenDaysAgo && createdDate <= today) {
-      const dateKey = createdDate.toISOString().split("T")[0];
-
-      if (dailyCounts[dateKey] !== undefined) {
-        dailyCounts[dateKey]++;
-      }
+      dailyCounts[dateKey] = 0;
     }
-  });
 
-  const trendData = Object.keys(dailyCounts).map((date) => ({
-    date,
-    count: dailyCounts[date],
-  }));
+    complaints.forEach((complaint) => {
+      const createdDate = new Date(complaint.created_date);
 
-  res.json({
-    zip,
-    complaintType,
-    trendData,
-  });
-});
+      if (createdDate >= fourteenDaysAgo && createdDate <= today) {
+        const dateKey = createdDate.toISOString().split("T")[0];
 
-router.get("/complaints", apiLimiter, async (req, res) => {
-  const { zip, complaintType } = req.query;
+        if (dailyCounts[dateKey] !== undefined) {
+          dailyCounts[dateKey]++;
+        }
+      }
+    });
 
-  if (!zip) {
-    return res.status(400).json({
-      error: "ZIP code is required",
+    const trendData = Object.keys(dailyCounts).map((date) => ({
+      date,
+      count: dailyCounts[date],
+    }));
+
+    res.json({
+      zip,
+      complaintType,
+      trendData,
     });
   }
+);
 
-  if (!isValidZip(zip)) {
-    return res.status(400).json({ error: "ZIP code must be 5 digits" });
+router.get(
+  "/complaints",
+  apiLimiter,
+  validate(complaintsQuerySchema),
+  async (req, res) => {
+    const { zip, complaintType } = req.query;
+
+    let query = `
+      SELECT *
+      WHERE incident_zip='${zip}'
+    `;
+
+    if (complaintType) {
+      query += ` AND complaint_type='${escapeSoqlString(complaintType)}'`;
+    }
+
+    query += `
+      ORDER BY created_date DESC
+      LIMIT 25
+    `;
+
+    const complaints = await fetchNycComplaints(query);
+
+    res.json(complaints);
   }
-
-  let query = `
-    SELECT *
-    WHERE incident_zip='${zip}'
-  `;
-
-  if (complaintType) {
-    query += ` AND complaint_type='${escapeSoqlString(complaintType)}'`;
-  }
-
-  query += `
-    ORDER BY created_date DESC
-    LIMIT 25
-  `;
-
-  const complaints = await fetchNycComplaints(query);
-
-  res.json(complaints);
-});
+);
 
 module.exports = router;
