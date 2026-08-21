@@ -50,7 +50,7 @@ A living document capturing security hardening, architecture/refactoring work, a
   - A data layer (`api.js` axios instance with a baseURL + auth interceptor) so the `Bearer` header isn't rebuilt in every call.
   - Custom hooks: `useComplaints`, `useTrend`, `useAlerts`.
   — Done 2026-07-30: `App.jsx` is 271 lines (down from 428) — data-fetching and auth fully extracted into `context/AuthContext.jsx`, `api/client.js`, and `hooks/` (`useComplaintTypes`, `useComplaints`, `useTrend`, `useAlerts`). Remaining lines are UI state (zip/complaintType/threshold/loading/error/view), validation, and rendering — view routing still uses the `view` state string (separate roadmap item below) rather than react-router. Verified with a real headless-browser run: register → logout → login → search → analyze trend → save alert → view in My Alerts → logout, zero console/page errors, screenshots confirmed correct rendering at each step.
-- [ ] **Introduce a real router** (`react-router`) instead of the `view` state string; enables deep links and cleaner nav.
+- [x] **Introduce a real router** (`react-router`) instead of the `view` state string; enables deep links and cleaner nav. — Done 2026-08-21: `react-router-dom`, real routes (`/`, `/alerts`, `/login`), `Components/ProtectedRoute.jsx` redirecting to `/login` if logged out. Also split each view out into `pages/ExplorePage.jsx`, `pages/AlertsPage.jsx`, `pages/LoginPage.jsx` — each now owns only its own state (`zip`/`complaintType`/`error`/etc. no longer shared app-wide), fixing the "stale error from a different page" problem that came with the single shared `error` string. `App.jsx` is now 71 lines (down from 271) — just the nav bar and route definitions. Found and fixed 3 real bugs while rewriting: the alerts view and the login view both tracked `error`/`loading` state but never actually rendered it (silently invisible failures); and `handleRegister` never navigated home on success (only `handleLogin` did) — all three faithfully reproduced from the pre-router code, not introduced by this change. Verified with a full headless-browser run covering the protected-route redirect, browser back-button behavior, and the complete register→alerts→search→save→logout flow — zero console/page errors, screenshots confirmed correct rendering.
 - [ ] **Add a data-fetching library** (TanStack Query) for caching, loading/error states, and request cancellation — removes most manual `loading`/`error` state.
 - [ ] **Error boundary** around the app.
 - [ ] **Consistent loading/error UX** — currently a single shared `error` string is reused across unrelated actions.
@@ -100,4 +100,4 @@ A living document capturing security hardening, architecture/refactoring work, a
 
 ---
 
-_Last updated: 2026-08-19_
+_Last updated: 2026-08-21_
